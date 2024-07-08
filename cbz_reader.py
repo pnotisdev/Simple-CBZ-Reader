@@ -18,9 +18,10 @@ class CBZReader(QMainWindow):
         self.cbz_files = []
         self.current_index = 0
         self.menu_visible = True
+        self.progress_bar_visible = True  # New attribute
 
     def initUI(self):
-        self.setWindowTitle('Pontus jävla CBZ-läsare')
+        self.setWindowTitle('pnotis cbz reader')
         self.setGeometry(100, 100, 1200, 800)
 
         self.file_list = QListWidget()
@@ -68,6 +69,10 @@ class CBZReader(QMainWindow):
         QShortcut(QKeySequence('Esc'), self, self.toggleFullScreen)
         QShortcut(QKeySequence('Ctrl+H'), self, self.toggleMenuVisibility)
 
+        # Connect a custom shortcut to toggle the progress bar visibility
+        toggle_progress_bar_shortcut = QShortcut(QKeySequence('Ctrl+P'), self)
+        toggle_progress_bar_shortcut.activated.connect(self.toggleProgressBar)
+
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #333;
@@ -106,6 +111,10 @@ class CBZReader(QMainWindow):
         self.contextMenu = QMenu(self)
         self.contextMenu.addAction(self.saveAction)
         self.contextMenu.addAction(self.copyAction)
+
+    def toggleProgressBar(self):
+        self.progress_bar_visible = not self.progress_bar_visible
+        self.progressBar.setVisible(self.progress_bar_visible)
 
     def openFolder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Open Folder", "")
