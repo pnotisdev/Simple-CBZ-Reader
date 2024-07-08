@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy, QAction, QMenu
 )
 from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QIcon
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent, QSize
 from PIL import Image
 from io import BytesIO
 
@@ -18,7 +18,7 @@ class CBZReader(QMainWindow):
         self.cbz_files = []
         self.current_index = 0
         self.menu_visible = True
-        self.progress_bar_visible = True  # New attribute
+        self.progress_bar_visible = True
 
     def initUI(self):
         self.setWindowTitle('pnotis cbz reader')
@@ -33,6 +33,7 @@ class CBZReader(QMainWindow):
         self.label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.label.setContextMenuPolicy(Qt.CustomContextMenu)
         self.label.customContextMenuRequested.connect(self.showContextMenu)
+        self.label.mousePressEvent = self.toggleProgressBar  # Connect mouse press event
 
         self.progressBar = QProgressBar(self)
         self.progressBar.setFormat('%p% - Page %v/%m')
@@ -68,10 +69,7 @@ class CBZReader(QMainWindow):
         QShortcut(QKeySequence('Left'), self, self.nextPage)
         QShortcut(QKeySequence('Esc'), self, self.toggleFullScreen)
         QShortcut(QKeySequence('Ctrl+H'), self, self.toggleMenuVisibility)
-
-        # Connect a custom shortcut to toggle the progress bar visibility
-        toggle_progress_bar_shortcut = QShortcut(QKeySequence('Ctrl+P'), self)
-        toggle_progress_bar_shortcut.activated.connect(self.toggleProgressBar)
+        QShortcut(QKeySequence('Ctrl+P'), self, self.toggleProgressBar)
 
         self.setStyleSheet("""
             QMainWindow {
@@ -112,7 +110,7 @@ class CBZReader(QMainWindow):
         self.contextMenu.addAction(self.saveAction)
         self.contextMenu.addAction(self.copyAction)
 
-    def toggleProgressBar(self):
+    def toggleProgressBar(self, event=None):
         self.progress_bar_visible = not self.progress_bar_visible
         self.progressBar.setVisible(self.progress_bar_visible)
 
