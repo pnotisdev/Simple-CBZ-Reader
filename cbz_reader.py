@@ -1,15 +1,15 @@
 import os
 import zipfile
+from PIL import Image
+from io import BytesIO
 from PyQt5.QtWidgets import (
     QMainWindow, QLabel, QVBoxLayout,
     QProgressBar, QFileDialog, QWidget, QPushButton, QApplication,
     QListWidget, QListWidgetItem, QHBoxLayout, QShortcut,
-    QSizePolicy, QAction, QMenu
+    QSizePolicy, QAction, QMenu, QMessageBox
 )
-from PyQt5.QtGui import QPixmap, QImage, QKeySequence, QIcon
-from PyQt5.QtCore import Qt, QEvent, QSize
-from PIL import Image
-from io import BytesIO
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QKeySequence
+from PyQt5.QtCore import Qt
 
 class CBZReader(QMainWindow):
     def __init__(self):
@@ -19,11 +19,21 @@ class CBZReader(QMainWindow):
         self.current_index = 0
         self.menu_visible = True
         self.progress_bar_visible = True
+        self.current_manga_title = None  # Initialize current_manga_title
 
     def initUI(self):
-        self.setWindowTitle('pnotis cbz reader')
+        self.setWindowTitle('pnotis CBZ Reader - No Manga Selected')
         self.setGeometry(100, 100, 1200, 800)
 
+        self.createWidgets()
+        self.createLayout()
+        self.createConnections()
+        self.createShortcuts()
+        self.createContextMenu()
+        self.setStyle()
+
+
+    def createWidgets(self):
         self.file_list = QListWidget()
         self.file_list.setMaximumWidth(300)
         self.file_list.itemClicked.connect(self.openCBZFromList)
@@ -33,24 +43,22 @@ class CBZReader(QMainWindow):
         self.label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.label.setContextMenuPolicy(Qt.CustomContextMenu)
         self.label.customContextMenuRequested.connect(self.showContextMenu)
-        self.label.mousePressEvent = self.toggleProgressBar  # Connect mouse press event
+        self.label.mousePressEvent = self.toggleProgressBar
 
         self.progressBar = QProgressBar(self)
         self.progressBar.setFormat('%p% - Page %v/%m')
         self.progressBar.setInvertedAppearance(True)
 
         self.openButton = QPushButton('Open Folder', self)
-        self.openButton.clicked.connect(self.openFolder)
-
         self.fullScreenButton = QPushButton('Full Screen', self)
-        self.fullScreenButton.clicked.connect(self.toggleFullScreen)
 
-        layout = QHBoxLayout()
-        layout.addWidget(self.openButton)
-        layout.addWidget(self.fullScreenButton)
+    def createLayout(self):
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.openButton)
+        button_layout.addWidget(self.fullScreenButton)
 
         vbox = QVBoxLayout()
-        vbox.addLayout(layout)
+        vbox.addLayout(button_layout)
         vbox.addWidget(self.file_list)
 
         img_layout = QVBoxLayout()
@@ -65,12 +73,34 @@ class CBZReader(QMainWindow):
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-        QShortcut(QKeySequence('Right'), self, self.prevPage)
-        QShortcut(QKeySequence('Left'), self, self.nextPage)
-        QShortcut(QKeySequence('Esc'), self, self.toggleFullScreen)
-        QShortcut(QKeySequence('Ctrl+H'), self, self.toggleMenuVisibility)
-        QShortcut(QKeySequence('Ctrl+P'), self, self.toggleProgressBar)
+    def createConnections(self):
+        self.openButton.clicked.connect(self.openFolder)
+        self.fullScreenButton.clicked.connect(self.toggleFullScreen)
 
+    def createShortcuts(self):
+        shortcuts = [
+            ('Right', self.prevPage),
+            ('Left', self.nextPage),
+            ('Esc', self.toggleFullScreen),
+            ('Ctrl+H', self.toggleMenuVisibility),
+            ('Ctrl+P', self.toggleProgressBar)
+        ]
+        for shortcut_key, slot_method in shortcuts:
+            shortcut = QShortcut(QKeySequence(shortcut_key), self)
+            shortcut.activated.connect(slot_method)
+
+    def createContextMenu(self):
+        self.saveAction = QAction(QIcon(), 'Save As...', self)
+        self.copyAction = QAction(QIcon(), 'Copy', self)
+
+        self.saveAction.triggered.connect(self.saveImage)
+        self.copyAction.triggered.connect(self.copyImage)
+
+        self.contextMenu = QMenu(self)
+        self.contextMenu.addAction(self.saveAction)
+        self.contextMenu.addAction(self.copyAction)
+
+    def setStyle(self):
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #333;
@@ -100,16 +130,6 @@ class CBZReader(QMainWindow):
             }
         """)
 
-        self.saveAction = QAction(QIcon(), 'Save As...', self)
-        self.saveAction.triggered.connect(self.saveImage)
-
-        self.copyAction = QAction(QIcon(), 'Copy', self)
-        self.copyAction.triggered.connect(self.copyImage)
-
-        self.contextMenu = QMenu(self)
-        self.contextMenu.addAction(self.saveAction)
-        self.contextMenu.addAction(self.copyAction)
-
     def toggleProgressBar(self, event=None):
         self.progress_bar_visible = not self.progress_bar_visible
         self.progressBar.setVisible(self.progress_bar_visible)
@@ -121,10 +141,11 @@ class CBZReader(QMainWindow):
 
     def loadFolder(self, folder_path):
         self.file_list.clear()
-        for file in os.listdir(folder_path):
-            if file.lower().endswith('.cbz'):
-                item = QListWidgetItem(file)
-                item.setData(Qt.UserRole, os.path.join(folder_path, file))
+        for file_name in os.listdir(folder_path):
+            if file_name.lower().endswith('.cbz'):
+                file_path = os.path.join(folder_path, file_name)
+                item = QListWidgetItem(file_name)
+                item.setData(Qt.UserRole, file_path)
                 self.file_list.addItem(item)
 
     def openCBZFromList(self, item):
@@ -132,22 +153,39 @@ class CBZReader(QMainWindow):
         self.loadCBZ(file_path)
 
     def loadCBZ(self, file_path):
-        with zipfile.ZipFile(file_path, 'r') as cbz:
-            self.cbz_files = sorted(
-                [file for file in cbz.namelist() if file.lower().endswith(('.png', '.jpg', '.jpeg'))],
-                reverse=True
-            )
-            self.current_index = len(self.cbz_files) - 1
-            self.showPage()
+        try:
+            with zipfile.ZipFile(file_path, 'r') as cbz:
+                self.cbz_files = sorted(
+                    [file for file in cbz.namelist() if file.lower().endswith(('.png', '.jpg', '.jpeg'))],
+                    reverse=True
+                )
+                self.current_index = len(self.cbz_files) - 1
+
+                # Extract manga title from file path
+                self.current_manga_title = os.path.basename(file_path).replace('.cbz', '')
+
+                # Update window title
+                self.setWindowTitle(f'pnotis CBZ Reader - {self.current_manga_title}')
+
+                self.showPage()  # Move showPage call here
+
+        except zipfile.BadZipFile:
+            QMessageBox.warning(self, 'Error', 'Invalid CBZ file.')
 
     def showPage(self):
         if self.cbz_files:
-            file = self.cbz_files[self.current_index]
-            with zipfile.ZipFile(self.file_list.currentItem().data(Qt.UserRole), 'r') as cbz:
-                data = cbz.read(file)
+            file_name = self.cbz_files[self.current_index]
+            cbz_file_path = self.file_list.currentItem().data(Qt.UserRole)
+            with zipfile.ZipFile(cbz_file_path, 'r') as cbz:
+                data = cbz.read(file_name)
                 image = Image.open(BytesIO(data))
                 self.displayImage(image)
             self.updateProgressBar()
+
+            # Update window title with manga title
+            if self.current_manga_title:
+                self.setWindowTitle(f'pnotis CBZ Reader - {self.current_manga_title}')
+
 
     def displayImage(self, image):
         image = image.convert("RGBA")
